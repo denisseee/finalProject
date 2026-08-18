@@ -459,11 +459,24 @@ def process_pdf(pdf_file):
 # ====================================================================
 # EXCEL STYLING HELPER
 # ====================================================================
-
 def write_styled_sheet(writer, df, sheet_name, title):
     safe_sheet = sheet_name[:31]
 
-    df.to_excel(
+    # 1. Calculate and append Average Row if DataFrame has numeric columns (Uptime/Downtime)
+    if not df.empty and ("Uptime" in df.columns or "Average Uptime" in df.columns):
+        avg_row = {}
+        for col in df.columns:
+            if pd.api.types.is_numeric_dtype(df[col]):
+                avg_row[col] = df[col].mean()
+            else:
+                avg_row[col] = "OVERALL AVERAGE" if col == df.columns[0] else ""
+        
+        # Append average row to dataframe copy
+        df_with_avg = pd.concat([df, pd.DataFrame([avg_row])], ignore_index=True)
+    else:
+        df_with_avg = df
+
+    df_with_avg.to_excel(
         writer,
         sheet_name=safe_sheet,
         index=False,
@@ -482,7 +495,7 @@ def write_styled_sheet(writer, df, sheet_name, title):
         "indent": 1,
     })
     worksheet.merge_range(
-        0, 0, 0, max(len(df.columns) - 1, 0),
+        0, 0, 0, max(len(df_with_avg.columns) - 1, 0),
         title,
         title_format,
     )
@@ -494,19 +507,41 @@ def write_styled_sheet(writer, df, sheet_name, title):
         "border": 1,
         "border_color": NAVY_600,
     })
-    for col_num, col_name in enumerate(df.columns):
+    for col_num, col_name in enumerate(df_with_avg.columns):
         worksheet.write(2, col_num, col_name, header_format)
 
+    # 2. Add distinct format for the total/average summary row at the bottom
+    avg_row_format = workbook.add_format({
+        "bold": True,
+        "font_color": "#FFFFFF",
+        "bg_color": NAVY_700,
+        "num_format": "0.000",
+        "border": 1,
+        "border_color": NAVY_600,
+    })
+    
     number_format = workbook.add_format({"num_format": "0.000"})
 
     worksheet.set_column(0, 0, 55)
-    if len(df.columns) > 1:
-        worksheet.set_column(1, len(df.columns) - 1, 16, number_format)
+    if len(df_with_avg.columns) > 1:
+        worksheet.set_column(1, len(df_with_avg.columns) - 1, 16, number_format)
 
-    if "Uptime" in df.columns:
-        uptime_col = df.columns.get_loc("Uptime")
+    # Write the average row cells with bold/highlighted formatting if data exists
+    if len(df_with_avg) > len(df):
+        last_row = 2 + len(df_with_avg)
+        for col_num in range(len(df_with_avg.columns)):
+            val = df_with_avg.iloc[-1, col_num]
+            if pd.isna(val) or val == "":
+                worksheet.write(last_row, col_num, "", avg_row_format)
+            elif isinstance(val, (int, float)):
+                worksheet.write(last_row, col_num, val, avg_row_format)
+            else:
+                worksheet.write(last_row, col_num, val, avg_row_format)
+
+    if "Uptime" in df_with_avg.columns or "Average Uptime" in df_with_avg.columns:
+        uptime_col = df_with_avg.columns.get_loc("Uptime") if "Uptime" in df_with_avg.columns else df_with_avg.columns.get_loc("Average Uptime")
         first_data_row = 3
-        last_data_row = 2 + len(df)
+        last_data_row = 2 + len(df) # Exclude the average row from conditional formatting
         if len(df) > 0:
             worksheet.conditional_format(
                 first_data_row, uptime_col, last_data_row, uptime_col,
@@ -519,7 +554,6 @@ def write_styled_sheet(writer, df, sheet_name, title):
             )
 
     worksheet.freeze_panes(3, 0)
-
 
 # ====================================================================
 # UPLOAD SECTION
