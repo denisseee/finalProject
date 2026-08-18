@@ -6,6 +6,7 @@ from pathlib import Path
 import io
 import zipfile
 from datetime import datetime
+import os
 
 
 # ====================================================================
@@ -463,11 +464,24 @@ def write_styled_sheet(writer, df, sheet_name, title):
     safe_sheet = sheet_name[:31]
 
     # 1. Calculate and append Average Row if DataFrame has numeric columns (Uptime/Downtime)
+    # if not df.empty and ("Uptime" in df.columns or "Average Uptime" in df.columns):
+    #     avg_row = {}
+    #     for col in df.columns:
+    #         if pd.api.types.is_numeric_dtype(df[col]):
+    #             avg_row[col] = df[col].mean().round(2).astype(str).str.rstrip("0").str.rstrip(".")
+    #         else:
+    #             avg_row[col] = "OVERALL AVERAGE" if col == df.columns[0] else ""
+        
+    #     # Append average row to dataframe copy
+    #     df_with_avg = pd.concat([df, pd.DataFrame([avg_row])], ignore_index=True)
+    # else:
+    #     df_with_avg = df
+    # 1. Calculate and append Average Row if DataFrame has numeric columns (Uptime/Downtime)
     if not df.empty and ("Uptime" in df.columns or "Average Uptime" in df.columns):
         avg_row = {}
         for col in df.columns:
             if pd.api.types.is_numeric_dtype(df[col]):
-                avg_row[col] = df[col].mean()
+                avg_row[col] = f"{df[col].mean():.2f}".rstrip("0").rstrip(".")
             else:
                 avg_row[col] = "OVERALL AVERAGE" if col == df.columns[0] else ""
         
@@ -671,45 +685,47 @@ if valid_files:
         # ------------------------------------------
         # Create Excel files in memory
         # ------------------------------------------
-
-        excel_files = {}
-
-        for sector, df in results.items():
-            if df.empty:
-                continue
-
-            safe_filename = re.sub(r'[<>:"/\\|?*]', "_", f"{sector}.xlsx")
-            excel_buffer = io.BytesIO()
-
-            with pd.ExcelWriter(
-                excel_buffer,
-                engine="xlsxwriter"
-            ) as writer:
-                write_styled_sheet(
-                    writer, df, sector, f"{sector} Sector Report"
-                )
-
-            excel_buffer.seek(0)
-            excel_files[safe_filename] = excel_buffer.getvalue()
-
+# ------------------------------------------
+        # Create a Single Multi-Tab Excel File in Memory
         # ------------------------------------------
-        # Create summary
-        # ------------------------------------------
-
         summary_data = []
-
         for sector, df in results.items():
             if df.empty:
                 continue
-
             summary_data.append({
                 "Sector": sector,
                 "Average Uptime": df["Uptime"].mean(),
                 "Average Downtime": df["Downtime"].mean()
             })
-
         summary_df = pd.DataFrame(summary_data)
+        multi_tab_buffer = io.BytesIO()
 
+        with pd.ExcelWriter(
+            multi_tab_buffer,
+            engine="xlsxwriter"
+        ) as writer:
+            
+            # 1. Write the Summary sheet first (or wherever you prefer)
+            if not summary_df.empty:
+                write_styled_sheet(
+                    writer, summary_df, "Sector Summary", "PRTG Sector Summary"
+                )
+
+            # 2. Write each sector's data into its own separate tab
+            for sector, df in results.items():
+                if df.empty:
+                    continue
+                write_styled_sheet(
+                    writer, df, sector, f"{sector} Sector Report"
+                )
+
+        multi_tab_buffer.seek(0)
+
+        # Store the multi-tab file bytes for download
+        excel_files = {
+            "All_Sectors_Combined_Report.xlsx": multi_tab_buffer.getvalue()
+        }
+        
         # ------------------------------------------
         # Metric cards
         # ------------------------------------------
