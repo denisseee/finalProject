@@ -1,0 +1,21 @@
+# PDF and DOCX source files
+*.pdf
+*.docx
+
+# PDF folder
+2026.08.12/
+
+# Generated Excel files
+*.xlsx
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment/secrets
+.env
