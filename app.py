@@ -424,7 +424,7 @@ def process_pdf(pdf_file):
                         uptime_downtime = row[6]
                         percentages = re.findall(percentage_pattern, uptime_downtime or "")
                         if len(percentages) >= 1:
-                            uptime = float(percentages[0])
+                            uptime = round(float(percentages[0]), 2)
                             data.append({
                                 "Probe, Group, Device": device,
                                 "Uptime": uptime
@@ -442,7 +442,7 @@ def process_pdf(pdf_file):
 
                         percentages = re.findall(percentage_pattern, first_cell)
                         if len(percentages) >= 1:
-                            uptime = float(percentages[0])
+                            uptime = round(float(percentages[0]), 2)
                             data.append({
                                 "Probe, Group, Device": device,
                                 "Uptime": uptime
@@ -477,15 +477,27 @@ def write_styled_sheet(writer, df, sheet_name, title):
     # else:
     #     df_with_avg = df
     # 1. Calculate and append Average Row if DataFrame has numeric columns (Uptime/Downtime)
+    # if not df.empty and ("Uptime" in df.columns or "Average Uptime" in df.columns):
+    #     avg_row = {}
+    #     for col in df.columns:
+    #         if pd.api.types.is_numeric_dtype(df[col]):
+    #             avg_row[col] = f"{df[col].mean():.2f}".rstrip("0").rstrip(".")
+    #         else:
+    #             avg_row[col] = "OVERALL AVERAGE" if col == df.columns[0] else ""
+        
+    #     # Append average row to dataframe copy
+    #     df_with_avg = pd.concat([df, pd.DataFrame([avg_row])], ignore_index=True)
+    # else:
+    #     df_with_avg = df
+    # 1. Calculate and append Average Row if DataFrame has numeric columns
     if not df.empty and ("Uptime" in df.columns or "Average Uptime" in df.columns):
         avg_row = {}
         for col in df.columns:
             if pd.api.types.is_numeric_dtype(df[col]):
-                avg_row[col] = f"{df[col].mean():.2f}".rstrip("0").rstrip(".")
+                avg_row[col] = round(float(df[col].mean()),2)
             else:
                 avg_row[col] = "OVERALL AVERAGE" if col == df.columns[0] else ""
         
-        # Append average row to dataframe copy
         df_with_avg = pd.concat([df, pd.DataFrame([avg_row])], ignore_index=True)
     else:
         df_with_avg = df
@@ -529,12 +541,12 @@ def write_styled_sheet(writer, df, sheet_name, title):
         "bold": True,
         "font_color": "#FFFFFF",
         "bg_color": NAVY_700,
-        "num_format": "0.000",
+        "num_format": "0.00",
         "border": 1,
         "border_color": NAVY_600,
     })
     
-    number_format = workbook.add_format({"num_format": "0.000"})
+    number_format = workbook.add_format({"num_format": "0.00"})
 
     worksheet.set_column(0, 0, 55)
     if len(df_with_avg.columns) > 1:
@@ -687,6 +699,89 @@ if valid_files:
         # ------------------------------------------
 # ------------------------------------------
         # Create a Single Multi-Tab Excel File in Memory
+        # # ------------------------------------------
+        # summary_data = []
+        # for sector, df in results.items():
+        #     if df.empty:
+        #         continue
+        #     summary_data.append({
+        #         "Sector": sector,
+        #         "Average Uptime": f"{df["Uptime"].mean():.2f}".rstrip("0").rstrip("."),
+        #         "Average Downtime": f"{df["Downtime"].mean():.2f}".rstrip("0").rstrip(".")
+        #     })
+        # summary_df = pd.DataFrame(summary_data)
+        # multi_tab_buffer = io.BytesIO()
+
+        # with pd.ExcelWriter(
+        #     multi_tab_buffer,
+        #     engine="xlsxwriter"
+        # ) as writer:
+            
+        #     # 1. Write the Summary sheet first (or wherever you prefer)
+        #     if not summary_df.empty:
+        #         write_styled_sheet(
+        #             writer, summary_df, "Sector Summary", "PRTG Sector Summary"
+        #         )
+
+        #     # 2. Write each sector's data into its own separate tab
+        #     for sector, df in results.items():
+        #         if df.empty:
+        #             continue
+        #         write_styled_sheet(
+        #             writer, df, sector, f"{sector} Sector Report"
+        #         )
+
+        # multi_tab_buffer.seek(0)
+
+        # # Store the multi-tab file bytes for download
+        # excel_files = {
+        #     "All_Sectors_Combined_Report.xlsx": multi_tab_buffer.getvalue()
+        # }
+        
+        # # ------------------------------------------
+        # # Metric cards
+        # # ------------------------------------------
+
+        # total_sectors = len(summary_df)
+        # total_devices = sum(len(df) for df in results.values() if not df.empty)
+        # avg_uptime = summary_df["Average Uptime"].mean() if not summary_df.empty else 0
+        # avg_downtime = summary_df["Average Downtime"].mean() if not summary_df.empty else 0
+
+        # c1, c2, c3, c4 = st.columns(4)
+        # for col, label, value, cls in [
+        #     (c1, "SECTORS", total_sectors, ""),
+        #     (c2, "DEVICES MONITORED", total_devices, ""),
+        #     (c3, "AVG UPTIME", f"{avg_uptime:.2f}%", "teal"),
+        #     (c4, "AVG DOWNTIME", f"{avg_downtime:.2f}%", "orange"),
+        # ]:
+        #     with col:
+        #         st.markdown(
+        #             f"""
+        #             <div class="metric-card">
+        #                 <div class="metric-label">{label}</div>
+        #                 <div class="metric-value {cls}">{value}</div>
+        #             </div>
+        #             """,
+        #             unsafe_allow_html=True,
+        #         )
+
+        # st.markdown("<br>", unsafe_allow_html=True)
+        # st.subheader("Sector Summary")
+        # st.dataframe(summary_df, use_container_width=True)
+
+        # with st.expander("View per-sector detail"):
+        #     for sector, df in results.items():
+        #         if df.empty:
+        #             st.markdown(f"**{sector}** — no data extracted")
+        #             continue
+        #         st.markdown(f"**{sector}** &nbsp; ({len(df)} devices)")
+        #         st.dataframe(df, use_container_width=True)
+
+        # ------------------------------------------
+        # Create Summary Excel
+        # ------------------------------------------
+        # ------------------------------------------
+        # Create summary DataFrame with pure numeric floats
         # ------------------------------------------
         summary_data = []
         for sector, df in results.items():
@@ -694,10 +789,14 @@ if valid_files:
                 continue
             summary_data.append({
                 "Sector": sector,
-                "Average Uptime": df["Uptime"].mean(),
-                "Average Downtime": df["Downtime"].mean()
+                "Average Uptime": round(df["Uptime"].mean(),2),
+                "Average Downtime": round(df["Downtime"].mean(),2)
             })
         summary_df = pd.DataFrame(summary_data)
+
+        # ------------------------------------------
+        # Create a Single Multi-Tab Excel File in Memory
+        # ------------------------------------------
         multi_tab_buffer = io.BytesIO()
 
         with pd.ExcelWriter(
@@ -705,7 +804,7 @@ if valid_files:
             engine="xlsxwriter"
         ) as writer:
             
-            # 1. Write the Summary sheet first (or wherever you prefer)
+            # 1. Write the Summary sheet first
             if not summary_df.empty:
                 write_styled_sheet(
                     writer, summary_df, "Sector Summary", "PRTG Sector Summary"
@@ -764,10 +863,6 @@ if valid_files:
                     continue
                 st.markdown(f"**{sector}** &nbsp; ({len(df)} devices)")
                 st.dataframe(df, use_container_width=True)
-
-        # ------------------------------------------
-        # Create Summary Excel
-        # ------------------------------------------
 
         summary_buffer = io.BytesIO()
 
